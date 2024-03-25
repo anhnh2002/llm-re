@@ -1,15 +1,21 @@
 import numpy as np
 import json
 import random
-from transformers import BertTokenizer
+from transformers import BertTokenizer, AutoTokenizer
 
-
+prompt = """{sentence}
+Relation between "{e1}" and "{e2}" is"""
 class data_sampler(object):
 
     def __init__(self, config=None, seed=None):
 
         self.config = config
-        self.tokenizer = BertTokenizer.from_pretrained(self.config.bert_path, additional_special_tokens=["[E11]", "[E12]", "[E21]", "[E22]"])
+
+        self.tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf",
+                                              token="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",
+                                              use_fast=False)
+        self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
+        # self.btokenizer = BertTokenizer.from_pretrained(self.config.bert_path   , additional_special_tokens=["[E11]", "[E12]", "[E21]", "[E22]"])
 
         self.id2rel, self.rel2id = self._read_relations(config.relation_file)
         self.id2sent = {}
@@ -63,11 +69,13 @@ class data_sampler(object):
                              headid, tailid])
         read_data = [[] for i in range(self.config.num_of_relation)]
 
-        for sample in samples:
+        for _, sample in enumerate(samples):
             text = sample[2]
             split_text = text.split(" ")
-            new_headent = ' [E11] ' + sample[3] + ' [E12] '
-            new_tailent = ' [E21] ' + sample[5] + ' [E22] '
+            # new_headent = ' [E11] ' + sample[3] + ' [E12] '
+            # new_tailent = ' [E21] ' + sample[5] + ' [E22] '
+            new_headent = ' ' + sample[3] + ' '
+            new_tailent = ' ' + sample[5] + ' '
             if sample[4][0] < sample[6][0]:
                 new_text = " ".join(split_text[0:sample[4][0]]) + new_headent + " ".join(
                     split_text[sample[4][-1] + 1:sample[6][0]]) \
@@ -77,13 +85,23 @@ class data_sampler(object):
                     split_text[sample[6][-1] + 1:sample[4][0]]) \
                            + new_headent + " ".join(split_text[sample[4][-1] + 1:len(split_text)])
 
+            new_text = prompt.format(sentence=new_text, e1=sample[3], e2=sample[5])
             tokenized_sample = {}
             tokenized_sample['relation'] = sample[0] - 1
             tokenized_sample['neg_labels'] = [can_idx - 1 for can_idx in sample[1]]
-            tokenized_sample['tokens'] = self.tokenizer.encode(new_text,
-                                                               padding='max_length',
-                                                               truncation=True,
-                                                               max_length=self.config.max_length)
+
+            inputs = self.tokenizer(new_text,
+                                    padding='max_length',
+                                    truncation=True,
+                                    max_length=self.config.max_length)
+            
+            tokenized_sample['tokens'] = inputs['input_ids']
+            tokenized_sample['att_mask'] = inputs['attention_mask']
+
+            tokenized_sample['text'] = new_text
+            tokenized_sample['e1'] = sample[3]
+            tokenized_sample['e2'] = sample[5]
+            tokenized_sample['id'] = _
             self.id2sent[len(self.id2sent)] = tokenized_sample['tokens']
             read_data[tokenized_sample['relation']].append(tokenized_sample)
         return read_data

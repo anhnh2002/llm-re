@@ -3,7 +3,9 @@ import random
 from sampler import data_sampler
 from config import Config
 import torch
-from model.bert_encoder import Bert_Encoder
+from transformers import AutoTokenizer
+from model.bert_encoder import Bert_Encoder, LlamaClassification
+from peft import get_peft_model, LoraConfig, TaskType#, prepare_model_for_int8_training
 from model.dropout_layer import Dropout_Layer
 from model.classifier import Softmax_Layer, Proto_Softmax_Layer
 from data_loader import get_data_loader
@@ -14,41 +16,102 @@ import numpy as np
 from sklearn.cluster import KMeans
 import collections
 from copy import deepcopy
-import os
+import torch.nn.functional as F
+import torch.nn as nn
 # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+
+device_map = {'model.embed_tokens': 0,
+ 'model.layers.0': 0,
+ 'model.layers.1': 0,
+ 'model.layers.2': 0,
+ 'model.layers.3': 0,
+ 'model.layers.4': 0,
+ 'model.layers.5': 0,
+ 'model.layers.6': 0,
+ 'model.layers.7': 0,
+ 'model.layers.8': 0,
+ 'model.layers.9': 0,
+ 'model.layers.10': 0,
+ 'model.layers.11': 0,
+ 'model.layers.12': 0,
+ 'model.layers.13': 0,
+ 'model.layers.14': 0,
+ 'model.layers.15': 0,
+ 'model.layers.16': 1,
+ 'model.layers.17': 1,
+ 'model.layers.18': 1,
+ 'model.layers.19': 1,
+ 'model.layers.20': 1,
+ 'model.layers.21': 1,
+ 'model.layers.22': 1,
+ 'model.layers.23': 1,
+ 'model.layers.24': 1,
+ 'model.layers.25': 1,
+ 'model.layers.26': 1,
+ 'model.layers.27': 1,
+ 'model.layers.28': 1,
+ 'model.layers.29': 1,
+ 'model.layers.30': 1,
+ 'model.layers.31': 1,
+ 'model.norm': 1}
 
 
 def train_simple_model(config, encoder, dropout_layer, classifier, training_data, epochs, map_relid2tempid):
     data_loader = get_data_loader(config, training_data, shuffle=True)
 
+    # encoder.train()
+    trainable_params = []
+    for _, param in encoder.named_parameters():
+        if param.requires_grad == True:
+            trainable_params.append(param)
+
     encoder.train()
     dropout_layer.train()
     classifier.train()
+    accum_iter = config.gradient_accumulation_steps
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam([
-        {'params': encoder.parameters(), 'lr': 0.00001},
+        {'params': trainable_params, 'lr': 0.00001},
         {'params': dropout_layer.parameters(), 'lr': 0.00001},
         {'params': classifier.parameters(), 'lr': 0.001}
     ])
+
+    # accelerator = Accelerator()
+    # encoder = accelerator.prepare_model(encoder)
+    # dropout_layer = accelerator.prepare_model(dropout_layer)
+    # classifier = accelerator.prepare_model(classifier)
+    
+    # optimizer = accelerator.prepare_optimizer(optimizer)
+    # data_loader = accelerator.prepare_data_loader(data_loader)
+
     for epoch_i in range(epochs):
         losses = []
+        _loss = 0
         for step, batch_data in enumerate(data_loader):
-            optimizer.zero_grad()
-            labels, _, tokens = batch_data
-            labels = labels.to(config.device)
+            if step == 0:
+                optimizer.zero_grad()
+            labels, _, tokens, att_mask, id = batch_data
+            labels = labels.to(config.device1)
             labels = [map_relid2tempid[x.item()] for x in labels]
-            labels = torch.tensor(labels).to(config.device)
+            labels = torch.tensor(labels).to(config.device1)
 
-            tokens = torch.stack([x.to(config.device) for x in tokens],dim=0)
-            reps = encoder(tokens)
+            tokens = torch.stack([x.to(config.device0) for x in tokens],dim=0)
+            reps = encoder(tokens, attention_mask = att_mask)
             reps, _ = dropout_layer(reps)
             logits = classifier(reps)
             loss = criterion(logits, labels)
+            loss = loss/accum_iter
 
-            losses.append(loss.item())
+            _loss += loss.item()
+            
             loss.backward()
-            optimizer.step()
+            # accelerator.backward(loss)
+            if ((step + 1) % accum_iter == 0) or (step + 1 == len(data_loader)):
+                losses.append(_loss)
+                _loss = 0
+                optimizer.step()
+                optimizer.zero_grad()
         print(f"loss is {np.array(losses).mean()}")
 
 
@@ -96,30 +159,58 @@ def construct_hard_triplets(output, labels, relation_data):
 def train_first(config, encoder, dropout_layer, classifier, training_data, epochs, map_relid2tempid, new_relation_data):
     data_loader = get_data_loader(config, training_data, shuffle=True)
 
+    # encoder.train()
+    # dropout_layer.train()
+    # classifier.train()
+
+    # accum_iter = config.gradient_accumulation_steps
+
+    # criterion = nn.CrossEntropyLoss()
+    # optimizer = optim.Adam([
+    #     {'params': encoder.parameters(), 'lr': 0.00001},
+    #     {'params': dropout_layer.parameters(), 'lr': 0.00001},
+    #     {'params': classifier.parameters(), 'lr': 0.001}
+    # ])
+    trainable_params = []
+    for _, param in encoder.named_parameters():
+        if param.requires_grad == True:
+            trainable_params.append(param)
+
     encoder.train()
     dropout_layer.train()
     classifier.train()
+    accum_iter = config.gradient_accumulation_steps
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam([
-        {'params': encoder.parameters(), 'lr': 0.00001},
+        {'params': trainable_params, 'lr': 0.00001},
         {'params': dropout_layer.parameters(), 'lr': 0.00001},
         {'params': classifier.parameters(), 'lr': 0.001}
     ])
+
+    # accelerator = Accelerator()
+    # encoder = accelerator.prepare_model(encoder)
+    # dropout_layer = accelerator.prepare_model(dropout_layer)
+    # classifier = accelerator.prepare_model(classifier)
+    
+    # optimizer = accelerator.prepare_optimizer(optimizer)
+    # data_loader = accelerator.prepare_data_loader(data_loader)
+
     triplet_loss = nn.TripletMarginLoss(margin=1.0, p=2)
     for epoch_i in range(epochs):
         losses = []
-        for step, (labels, _, tokens) in enumerate(data_loader):
-
-            optimizer.zero_grad()
+        _loss = 0
+        for step, (labels, _, tokens, att_mask, id) in enumerate(data_loader):
+            if step == 0:
+                optimizer.zero_grad()
 
             logits_all = []
-            tokens = torch.stack([x.to(config.device) for x in tokens], dim=0)
-            labels = labels.to(config.device)
+            tokens = torch.stack([x.to(config.device0) for x in tokens], dim=0)
+            labels = labels.to(config.device1)
             origin_labels = labels[:]
             labels = [map_relid2tempid[x.item()] for x in labels]
-            labels = torch.tensor(labels).to(config.device)
-            reps = encoder(tokens)
+            labels = torch.tensor(labels).to(config.device1)
+            reps = encoder(tokens, attention_mask=att_mask)
             outputs,_ = dropout_layer(reps)
             positives,negatives = construct_hard_triplets(outputs, origin_labels, new_relation_data)
 
@@ -128,8 +219,8 @@ def train_first(config, encoder, dropout_layer, classifier, training_data, epoch
                 logits = classifier(output)
                 logits_all.append(logits)
 
-            positives = torch.cat(positives, 0).to(config.device)
-            negatives = torch.cat(negatives, 0).to(config.device)
+            positives = torch.cat(positives, 0).to(config.device1)
+            negatives = torch.cat(negatives, 0).to(config.device1)
             anchors = outputs
             logits_all = torch.stack(logits_all)
             m_labels = labels.expand((config.f_pass, labels.shape[0]))  # m,B
@@ -138,9 +229,20 @@ def train_first(config, encoder, dropout_layer, classifier, training_data, epoch
             tri_loss = triplet_loss(anchors, positives, negatives)
             loss = loss1 + loss2 + tri_loss
 
+            loss = loss/accum_iter
+
+            _loss += loss.item()
+            
             loss.backward()
-            losses.append(loss.item())
-            optimizer.step()
+            # accelerator.backward(loss)
+            if ((step + 1) % accum_iter == 0) or (step + 1 == len(data_loader)):
+                losses.append(_loss)
+                _loss = 0
+                optimizer.step()
+                optimizer.zero_grad()
+            # loss.backward()
+            # losses.append(loss.item())
+            # optimizer.step()
         print(f"loss is {np.array(losses).mean()}")
 
 
@@ -148,32 +250,56 @@ def train_mem_model(config, encoder, dropout_layer, classifier, training_data, e
                 prev_encoder, prev_dropout_layer, prev_classifier, prev_relation_index):
     data_loader = get_data_loader(config, training_data, shuffle=True)
 
+    prevreps = {}
+    if prev_encoder is not None:
+        for labels, _, tokens, att_mask, id in data_loader:
+            tokens = torch.stack([x.to(config.device0) for x in tokens], dim=0)
+            _reps = encoder(tokens, attention_mask=att_mask).detach()
+            for i, _rep in enumerate(_reps):
+                prevreps[id[i].item()] = _rep
+
+    trainable_params = []
+    for _, param in encoder.named_parameters():
+        if param.requires_grad == True:
+            trainable_params.append(param)
+
     encoder.train()
     dropout_layer.train()
     classifier.train()
+    accum_iter = config.gradient_accumulation_steps
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam([
-        {'params': encoder.parameters(), 'lr': 0.00001},
+        {'params': trainable_params, 'lr': 0.00001},
         {'params': dropout_layer.parameters(), 'lr': 0.00001},
         {'params': classifier.parameters(), 'lr': 0.001}
     ])
+
+    # accelerator = Accelerator()
+    # encoder = accelerator.prepare_model(encoder)
+    # dropout_layer = accelerator.prepare_model(dropout_layer)
+    # classifier = accelerator.prepare_model(classifier)
+    
+    # optimizer = accelerator.prepare_optimizer(optimizer)
+    # data_loader = accelerator.prepare_data_loader(data_loader)
+
     triplet_loss = nn.TripletMarginLoss(margin=1.0, p=2)
     distill_criterion = nn.CosineEmbeddingLoss()
     T = config.kl_temp
     for epoch_i in range(epochs):
         losses = []
-        for step, (labels, _, tokens) in enumerate(data_loader):
-
-            optimizer.zero_grad()
+        _loss = 0
+        for step, (labels, _, tokens, att_mask, id) in enumerate(data_loader):
+            if step == 0:
+                optimizer.zero_grad()
 
             logits_all = []
-            tokens = torch.stack([x.to(config.device) for x in tokens], dim=0)
-            labels = labels.to(config.device)
+            tokens = torch.stack([x.to(config.device0) for x in tokens], dim=0)
+            labels = labels.to(config.device1)
             origin_labels = labels[:]
             labels = [map_relid2tempid[x.item()] for x in labels]
-            labels = torch.tensor(labels).to(config.device)
-            reps = encoder(tokens)
+            labels = torch.tensor(labels).to(config.device1)
+            reps = encoder(tokens, attention_mask=att_mask)
             normalized_reps_emb = F.normalize(reps.view(-1, reps.size()[1]), p=2, dim=1)
             outputs,_ = dropout_layer(reps)
             if prev_dropout_layer is not None:
@@ -187,8 +313,8 @@ def train_mem_model(config, encoder, dropout_layer, classifier, training_data, e
                 logits = classifier(output)
                 logits_all.append(logits)
 
-            positives = torch.cat(positives, 0).to(config.device)
-            negatives = torch.cat(negatives, 0).to(config.device)
+            positives = torch.cat(positives, 0).to(config.device1)
+            negatives = torch.cat(negatives, 0).to(config.device1)
             anchors = outputs
             logits_all = torch.stack(logits_all)
             m_labels = labels.expand((config.f_pass, labels.shape[0]))  # m,B
@@ -198,12 +324,16 @@ def train_mem_model(config, encoder, dropout_layer, classifier, training_data, e
             loss = loss1 + loss2 + tri_loss
 
             if prev_encoder is not None:
-                prev_reps = prev_encoder(tokens).detach()
+                _device = loss.device
+                prev_reps = []
+                for _id in id:
+                    prev_reps.append(prevreps[_id.item()])
+                prev_reps = torch.stack(prev_reps)
+                # prev_reps = prev_encoder(tokens).detach()
                 normalized_prev_reps_emb = F.normalize(prev_reps.view(-1, prev_reps.size()[1]), p=2, dim=1)
 
-                feature_distill_loss = distill_criterion(normalized_reps_emb, normalized_prev_reps_emb,
-                                                         torch.ones(tokens.size(0)).to(
-                                                             config.device))
+                feature_distill_loss = distill_criterion(normalized_reps_emb.to(_device), normalized_prev_reps_emb.to(_device),
+                                                         torch.ones(tokens.size(0)).to(_device))
                 loss += feature_distill_loss
 
             if prev_dropout_layer is not None and prev_classifier is not None:
@@ -235,12 +365,23 @@ def train_mem_model(config, encoder, dropout_layer, classifier, training_data, e
                 normalized_prev_output = F.normalize(mean_prev_dropout_output_all.view(-1, mean_prev_dropout_output_all.size()[1]), p=2, dim=1)
                 hidden_distill_loss = distill_criterion(normalized_output, normalized_prev_output,
                                                          torch.ones(tokens.size(0)).to(
-                                                             config.device))
+                                                             config.device1))
                 loss += hidden_distill_loss
 
+            # loss.backward()
+            # losses.append(loss.item())
+            # optimizer.step()
+            loss = loss/accum_iter
+
+            _loss += loss.item()
+            
             loss.backward()
-            losses.append(loss.item())
-            optimizer.step()
+            # accelerator.backward(loss)
+            if ((step + 1) % accum_iter == 0) or (step + 1 == len(data_loader)):
+                losses.append(_loss)
+                _loss = 0
+                optimizer.step()
+                optimizer.zero_grad()
         print(f"loss is {np.array(losses).mean()}")
 
 
@@ -259,9 +400,56 @@ def batch2device(batch_tuple, device):
             ans.append(var)
     return ans
 
+# def prep_eval(config, encoder, test_data, map_relid2tempid):
+#     data_loader = get_data_loader(config, test_data, batch_size=1, shuffle=False)
+#     encoder.eval()
+    
+#     result = []
+#     for step, batch_data in enumerate(data_loader):
+#         labels, _, tokens, _id = batch_data
+#         labels = labels.to(config.device1)
+#         labels = [map_relid2tempid[x.item()] for x in labels]
+#         labels = torch.tensor(labels).to(config.device1)
+
+#         tokens = torch.stack([x.to(config.device0) for x in tokens],dim=0)
+#         reps = encoder(tokens)
+#         result.append(reps[0].cpu().numpy())
+        
+
+# def prev_eval(config, pre_reps, dropout_layer, classifier, test_data, seen_relations, map_relid2tempid):
+#     data_loader = get_data_loader(config, test_data, batch_size=1, shuffle=False)
+#     # encoder.eval()
+#     dropout_layer.eval()
+#     classifier.eval()
+#     n = len(test_data)
+
+#     correct = 0
+#     for step, batch_data in enumerate(data_loader):
+#         labels, _, tokens, _id = batch_data
+#         labels = labels.to(config.device1)
+#         labels = [map_relid2tempid[x.item()] for x in labels]
+#         labels = torch.tensor(labels).to(config.device1)
+
+#         # tokens = torch.stack([x.to(config.device0) for x in tokens],dim=0)
+#         # reps = encoder(tokens)
+#         reps = torch.Tensor(pre_reps[step]).unsqueeze(0).to(config.device1)
+#         reps, _ = dropout_layer(reps)
+#         logits = classifier(reps)
+
+#         seen_relation_ids = [rel2id[relation] for relation in seen_relations]
+#         seen_relation_ids = [map_relid2tempid[relation] for relation in seen_relation_ids]
+#         seen_sim = logits[:,seen_relation_ids].cpu().data.numpy()
+#         max_smi = np.max(seen_sim,axis=1)
+
+#         label_smi = logits[:,labels].cpu().data.numpy()
+
+#         if label_smi >= max_smi:
+#             correct += 1
+
+#     return correct/n
 
 def evaluate_strict_model(config, encoder, dropout_layer, classifier, test_data, seen_relations, map_relid2tempid):
-    data_loader = get_data_loader(config, test_data, batch_size=1)
+    data_loader = get_data_loader(config, test_data, batch_size=1, shuffle=False)
     encoder.eval()
     dropout_layer.eval()
     classifier.eval()
@@ -269,13 +457,13 @@ def evaluate_strict_model(config, encoder, dropout_layer, classifier, test_data,
 
     correct = 0
     for step, batch_data in enumerate(data_loader):
-        labels, _, tokens = batch_data
-        labels = labels.to(config.device)
+        labels, _, tokens, att_mask, _id = batch_data
+        labels = labels.to(config.device1)
         labels = [map_relid2tempid[x.item()] for x in labels]
-        labels = torch.tensor(labels).to(config.device)
+        labels = torch.tensor(labels).to(config.device1)
 
-        tokens = torch.stack([x.to(config.device) for x in tokens],dim=0)
-        reps = encoder(tokens)
+        tokens = torch.stack([x.to(config.device0) for x in tokens],dim=0)
+        reps = encoder(tokens, attention_mask=att_mask)
         reps, _ = dropout_layer(reps)
         logits = classifier(reps)
 
@@ -298,10 +486,10 @@ def select_data(config, encoder, dropout_layer, relation_dataset):
     encoder.eval()
     dropout_layer.eval()
     for step, batch_data in enumerate(data_loader):
-        labels, _, tokens = batch_data
-        tokens = torch.stack([x.to(config.device) for x in tokens],dim=0)
+        labels, _, tokens, att_mask, _id = batch_data
+        tokens = torch.stack([x.to(config.device0) for x in tokens],dim=0)
         with torch.no_grad():
-            feature = dropout_layer(encoder(tokens))[1].cpu()
+            feature = dropout_layer(encoder(tokens, attention_mask=att_mask))[1].cpu()
         features.append(feature)
 
     features = np.concatenate(features)
@@ -322,10 +510,10 @@ def get_proto(config, encoder, dropout_layer, relation_dataset):
     encoder.eval()
     dropout_layer.eval()
     for step, batch_data in enumerate(data_loader):
-        labels, _, tokens = batch_data
-        tokens = torch.stack([x.to(config.device) for x in tokens],dim=0)
+        labels, _, tokens, att_mask, _id = batch_data
+        tokens = torch.stack([x.to(config.device0) for x in tokens],dim=0)
         with torch.no_grad():
-            feature = dropout_layer(encoder(tokens))[1]
+            feature = dropout_layer(encoder(tokens, attention_mask=att_mask))[1]
         features.append(feature)
     features = torch.cat(features, dim=0)
     proto = torch.mean(features, dim=0, keepdim=True).cpu()
@@ -350,40 +538,52 @@ def generate_current_relation_data(config, encoder, dropout_layer, relation_data
     encoder.eval()
     dropout_layer.eval()
     for step, batch_data in enumerate(data_loader):
-        labels, _, tokens = batch_data
-        tokens = torch.stack([x.to(config.device) for x in tokens],dim=0)
+        labels, _, tokens, att_mask, _id = batch_data
+        tokens = torch.stack([x.to(config.device0) for x in tokens],dim=0)
         with torch.no_grad():
-            feature = dropout_layer(encoder(tokens))[1].cpu()
+            feature = dropout_layer(encoder(tokens, attention_mask=att_mask))[1].cpu()
         relation_data.append(feature)
     return relation_data
 
-from transformers import  BertTokenizer
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf",
+                                        token="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",
+                                        use_fast=False)
+tokenizer.pad_token_id = tokenizer.eos_token_id
+
 def data_augmentation(config, encoder, train_data, prev_train_data):
     expanded_train_data = train_data[:]
     expanded_prev_train_data = prev_train_data[:]
     encoder.eval()
     all_data = train_data + prev_train_data
-    tokenizer = BertTokenizer.from_pretrained(config.bert_path, additional_special_tokens=["[E11]", "[E12]", "[E21]", "[E22]"])
-    entity_index = []
+    # tokenizer = BertTokenizer.from_pretrained(config.bert_path, additional_special_tokens=["[E11]", "[E12]", "[E21]", "[E22]"])
+    # tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf",
+    #                                           token="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")
+    
+    # entity_index = []
+    # entity_mention = []
+    # for sample in all_data:
+    #     e11 = sample['_tokens'].index(32000)
+    #     e12 = sample['_tokens'].index(32001)
+    #     e21 = sample['_tokens'].index(32002)
+    #     e22 = sample['_tokens'].index(32003)
+    #     entity_index.append([e11,e12])
+    #     entity_mention.append(sample['tokens'][e11+1:e12])
+    #     entity_index.append([e21,e22])
+    #     entity_mention.append(sample['tokens'][e21+1:e22])
     entity_mention = []
     for sample in all_data:
-        e11 = sample['tokens'].index(30522)
-        e12 = sample['tokens'].index(30523)
-        e21 = sample['tokens'].index(30524)
-        e22 = sample['tokens'].index(30525)
-        entity_index.append([e11,e12])
-        entity_mention.append(sample['tokens'][e11+1:e12])
-        entity_index.append([e21,e22])
-        entity_mention.append(sample['tokens'][e21+1:e22])
+        entity_mention.append(sample['e1'])
+        entity_mention.append(sample['e2'])
 
     data_loader = get_data_loader(config, all_data, shuffle=False, drop_last=False, batch_size=1)
     features = []
     encoder.eval()
     for step, batch_data in enumerate(data_loader):
-        labels, _, tokens = batch_data
-        tokens = torch.stack([x.to(config.device) for x in tokens],dim=0)
+        labels, _, tokens, att_mask, _id = batch_data
+        tokens = torch.stack([x.to(config.device0) for x in tokens],dim=0)
         with torch.no_grad():
-            feature = encoder(tokens)
+            feature = encoder(tokens, attention_mask=att_mask, get_feature=True)
+            # print(feature.shape)
         feature1, feature2 = torch.split(feature, [config.encoder_output_size,config.encoder_output_size], dim=1)
         features.append(feature1)
         features.append(feature2)
@@ -399,8 +599,8 @@ def data_augmentation(config, encoder, train_data, prev_train_data):
             similarity_matrix[i][j] = similarity
             similarity_matrix[j][i] = similarity
 
-    similarity_matrix = torch.tensor(similarity_matrix).to(config.device)
-    zero = torch.zeros_like(similarity_matrix).to(config.device)
+    similarity_matrix = torch.tensor(similarity_matrix).to(config.device0)
+    zero = torch.zeros_like(similarity_matrix).to(config.device0)
     diag = torch.diag_embed(torch.diag(similarity_matrix))
     similarity_matrix -= diag
     similarity_matrix = torch.where(similarity_matrix<0.95, zero, similarity_matrix)
@@ -412,16 +612,24 @@ def data_augmentation(config, encoder, train_data, prev_train_data):
         sample = all_data[sample_index]
         if entity_mention[origin] == entity_mention[replace]:
             continue
-        new_tokens = sample['tokens'][:entity_index[origin][0]+1] + entity_mention[replace] + sample['tokens'][entity_index[origin][1]:]
-        if len(new_tokens) < config.max_length:
-            new_tokens = new_tokens + [0]*(config.max_length-len(new_tokens))
-        else:
-            new_tokens = new_tokens[:config.max_length]
+        # new_tokens = sample['tokens'][:entity_index[origin][0]+1] + entity_mention[replace] + sample['tokens'][entity_index[origin][1]:]
+        new_text = sample['text'].replace(entity_mention[origin], entity_mention[replace])
+        new_tokens = tokenizer.encode(new_text,
+                                      padding='max_length',
+                                      truncation=True,
+                                      max_length=config.max_length)#.to(config.device0)
+        # if len(new_tokens) < config.max_length:
+        #     new_tokens = new_tokens + [0]*(config.max_length-len(new_tokens))
+        # else:
+        #     new_tokens = new_tokens[:config.max_length]
 
         new_sample = {
             'relation': sample['relation'],
             'neg_labels': sample['neg_labels'],
-            'tokens': new_tokens
+            'tokens': new_tokens,
+            'text': sample['text'],
+            'e1': sample['e1'],
+            'e2': sample['e2']
         }
         if sample_index < len(train_data) and expanded_train_count < 5 * len(train_data):
             expanded_train_data.append(new_sample)
@@ -434,12 +642,13 @@ def data_augmentation(config, encoder, train_data, prev_train_data):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--task", default="tacred", type=str)
-    parser.add_argument("--shot", default=10, type=str)
+    parser.add_argument("--shot", default=5, type=str)
     parser.add_argument('--config', default='config.ini')
     args = parser.parse_args()
     config = Config(args.config)
 
-    config.device = torch.device(config.device)
+    config.device0 = torch.device(config.device0)
+    config.device1 = torch.device(config.device1)
     config.n_gpu = torch.cuda.device_count()
     config.batch_size_per_step = int(config.batch_size / config.gradient_accumulation_steps)
 
@@ -504,8 +713,22 @@ if __name__ == '__main__':
         id2rel = sampler.id2rel
         rel2id = sampler.rel2id
         id2sentence = sampler.get_id2sent()
-        encoder = Bert_Encoder(config=config).to(config.device)
-        dropout_layer = Dropout_Layer(config=config).to(config.device)
+        # encoder = Bert_Encoder(config=config).to(config.device)
+        encoder = LlamaClassification.from_pretrained("meta-llama/Llama-2-7b-hf",
+#                                                   pad_token_id=32004,
+#                                                   torch_dtype=torch.float16,
+#                                                   quantization_config=bnb_config,
+                                                #   load_in_8bit = True,
+                                                    token="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",
+                                                    device_map=device_map)
+        peft_config = LoraConfig(task_type=TaskType.SEQ_CLS,
+                                target_modules=["q_proj", "v_proj", "o_proj", "o_proj"],
+                                r=16,
+                                lora_alpha=32,
+                                lora_dropout=0.1,)
+        # model = prepare_model_for_int8_training(model)
+        encoder = get_peft_model(encoder, peft_config)
+        dropout_layer = Dropout_Layer(config=config).to(config.device1)
         num_class = len(sampler.id2rel)
 
         memorized_samples = {}
@@ -539,10 +762,10 @@ if __name__ == '__main__':
             for relation in prev_relations:
                 prev_relation_index.append(map_relid2tempid[rel2id[relation]])
                 prev_samples += memorized_samples[relation]
-            prev_relation_index = torch.tensor(prev_relation_index).to(config.device)
+            prev_relation_index = torch.tensor(prev_relation_index).to(config.device1)
 
-            classifier = Softmax_Layer(input_size=encoder.output_size, num_class=len(history_relations)).to(
-                config.device)
+            classifier = Softmax_Layer(input_size=config.encoder_output_size, num_class=len(history_relations)).to(
+                config.device1)
 
             temp_protos = {}
             for relation in current_relations:
@@ -558,11 +781,14 @@ if __name__ == '__main__':
                 test_data_1 += test_data[relation]
 
             if steps != 0:
-                forward_acc = evaluate_strict_model(config, prev_encoder, prev_dropout_layer, classifier, test_data_1, seen_relations, map_relid2tempid)
+                forward_acc = evaluate_strict_model(config, encoder, prev_dropout_layer, classifier, test_data_1, seen_relations, map_relid2tempid)
                 forward_accs.append(forward_acc)
 
             train_simple_model(config, encoder, dropout_layer, classifier, train_data_for_initial, config.step1_epochs, map_relid2tempid)
             print(f"simple finished")
+            # expanded_train_data_for_initial, expanded_prev_samples = data_augmentation(config, encoder,
+            #                                                                            train_data_for_initial,
+            #                                                                            prev_samples)
 
 
             temp_protos = {}
@@ -582,12 +808,12 @@ if __name__ == '__main__':
             for relation in current_relations:
                 new_relation_data[rel2id[relation]].extend(generate_current_relation_data(config, encoder,dropout_layer,training_data[relation]))
 
-            expanded_train_data_for_initial, expanded_prev_samples = data_augmentation(config, encoder,
-                                                                                       train_data_for_initial,
-                                                                                       prev_samples)
+            # expanded_train_data_for_initial, expanded_prev_samples = data_augmentation(config, encoder,
+            #                                                                            train_data_for_initial,
+            #                                                                            prev_samples)
             torch.cuda.empty_cache()
-            print(len(train_data_for_initial))
-            print(len(expanded_train_data_for_initial))
+            # print(len(train_data_for_initial))
+            # print(len(expanded_train_data_for_initial))
 
 
             train_mem_model(config, encoder, dropout_layer, classifier, train_data_for_initial, config.step2_epochs, map_relid2tempid, new_relation_data,
@@ -649,7 +875,8 @@ if __name__ == '__main__':
                 accuracy.append(evaluate_strict_model(config, encoder, dropout_layer, classifier, data, seen_relations, map_relid2tempid))
             print(accuracy)
 
-            prev_encoder = deepcopy(encoder)
+            # prev_encoder = deepcopy(encoder)
+            prev_encoder = "abc"
             prev_dropout_layer = deepcopy(dropout_layer)
             prev_classifier = deepcopy(classifier)
             torch.cuda.empty_cache()
