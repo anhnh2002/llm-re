@@ -11,10 +11,10 @@ class data_sampler(object):
 
         self.config = config
 
-        self.tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf",
+        self.tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b",
                                               token="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",
                                               use_fast=False)
-        self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
+        # self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
         # self.btokenizer = BertTokenizer.from_pretrained(self.config.bert_path   , additional_special_tokens=["[E11]", "[E12]", "[E21]", "[E22]"])
 
         self.id2rel, self.rel2id = self._read_relations(config.relation_file)

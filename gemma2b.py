@@ -4,7 +4,7 @@ from sampler import data_sampler
 from config import Config
 import torch
 from transformers import AutoTokenizer
-from model.bert_encoder import Bert_Encoder, LlamaClassification, LlamaLMClassification
+from model.bert_encoder import Bert_Encoder, GemmaClassification, GemmaLMClassification
 from peft import get_peft_model, LoraConfig, TaskType#, prepare_model_for_int8_training
 from model.dropout_layer import Dropout_Layer
 from model.classifier import Softmax_Layer, Proto_Softmax_Layer
@@ -19,44 +19,64 @@ from copy import deepcopy
 import torch.nn.functional as F
 import torch.nn as nn
 from tqdm import tqdm
+from accelerate import Accelerator
 # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
-device_map = {'model.embed_tokens': 0,
- 'model.layers.0': 0,
- 'model.layers.1': 0,
- 'model.layers.2': 0,
- 'model.layers.3': 0,
- 'model.layers.4': 0,
- 'model.layers.5': 0,
- 'model.layers.6': 0,
- 'model.layers.7': 0,
- 'model.layers.8': 0,
- 'model.layers.9': 0,
- 'model.layers.10': 0,
- 'model.layers.11': 0,
- 'model.layers.12': 0,
- 'model.layers.13': 0,
- 'model.layers.14': 0,
- 'model.layers.15': 0,
- 'model.layers.16': 0,
- 'model.layers.17': 1,
- 'model.layers.18': 1,
- 'model.layers.19': 1,
- 'model.layers.20': 1,
- 'model.layers.21': 1,
- 'model.layers.22': 1,
- 'model.layers.23': 1,
- 'model.layers.24': 1,
- 'model.layers.25': 1,
- 'model.layers.26': 1,
- 'model.layers.27': 1,
- 'model.layers.28': 1,
- 'model.layers.29': 1,
- 'model.layers.30': 1,
- 'model.layers.31': 1,
- 'model.norm': 1,
- 'lm_head': 1,
- 'info_nce_fc': 1}
+parser = argparse.ArgumentParser()
+parser.add_argument("--task", default="tacred", type=str)
+parser.add_argument("--shot", default=5, type=str)
+parser.add_argument('--config', default='config.ini')
+args = parser.parse_args()
+config = Config(args.config)
+
+config.device0 = torch.device(config.device0)
+config.device1 = torch.device(config.device1)
+config.n_gpu = torch.cuda.device_count()
+config.batch_size_per_step = int(config.batch_size / config.gradient_accumulation_steps)
+
+config.task = args.task
+config.shot = args.shot
+config.step1_epochs = 5
+config.step2_epochs = 15
+config.step3_epochs = 20
+config.temperature = 0.08
+
+device_map = {'model.embed_tokens': int(config.device0.index),
+ 'model.layers.0': int(config.device0.index),
+ 'model.layers.1': int(config.device0.index),
+ 'model.layers.2': int(config.device0.index),
+ 'model.layers.3': int(config.device0.index),
+ 'model.layers.4': int(config.device0.index),
+ 'model.layers.5': int(config.device0.index),
+ 'model.layers.6': int(config.device0.index),
+ 'model.layers.7': int(config.device0.index),
+ 'model.layers.8': int(config.device0.index),
+ 'model.layers.9': int(config.device0.index),
+ 'model.layers.10': int(config.device0.index),
+ 'model.layers.11': int(config.device0.index),
+ 'model.layers.12': int(config.device0.index),
+ 'model.layers.13': int(config.device0.index),
+ 'model.layers.14': int(config.device0.index),
+ 'model.layers.15': int(config.device0.index),
+ 'model.layers.16': int(config.device0.index),
+ 'model.layers.17': int(config.device1.index),
+ 'model.layers.18': int(config.device1.index),
+ 'model.layers.19': int(config.device1.index),
+ 'model.layers.20': int(config.device1.index),
+ 'model.layers.21': int(config.device1.index),
+ 'model.layers.22': int(config.device1.index),
+ 'model.layers.23': int(config.device1.index),
+ 'model.layers.24': int(config.device1.index),
+ 'model.layers.25': int(config.device1.index),
+ 'model.layers.26': int(config.device1.index),
+ 'model.layers.27': int(config.device1.index),
+ 'model.layers.28': int(config.device1.index),
+ 'model.layers.29': int(config.device1.index),
+ 'model.layers.30': int(config.device1.index),
+ 'model.layers.31': int(config.device1.index),
+ 'model.norm': int(config.device1.index),
+ 'lm_head': int(config.device1.index),
+ 'info_nce_fc': int(config.device1.index)}
 
 
 def train_simple_model(config, encoder, dropout_layer, classifier, training_data, epochs, map_relid2tempid):
@@ -80,13 +100,14 @@ def train_simple_model(config, encoder, dropout_layer, classifier, training_data
         {'params': classifier.parameters(), 'lr': 0.001}
     ])
 
-    # accelerator = Accelerator()
-    # encoder = accelerator.prepare_model(encoder)
-    # dropout_layer = accelerator.prepare_model(dropout_layer)
-    # classifier = accelerator.prepare_model(classifier)
-    
-    # optimizer = accelerator.prepare_optimizer(optimizer)
-    # data_loader = accelerator.prepare_data_loader(data_loader)
+    if config.device0 == config.device1:
+        accelerator = Accelerator()
+        encoder = accelerator.prepare_model(encoder)
+        dropout_layer = accelerator.prepare_model(dropout_layer)
+        classifier = accelerator.prepare_model(classifier)
+        
+        optimizer = accelerator.prepare_optimizer(optimizer)
+        data_loader = accelerator.prepare_data_loader(data_loader)
 
     for epoch_i in range(epochs):
         losses = []
@@ -109,8 +130,12 @@ def train_simple_model(config, encoder, dropout_layer, classifier, training_data
 
             _loss += loss.item()
             
-            loss.backward()
-            # accelerator.backward(loss)
+            if config.device0 == config.device1:
+                accelerator.backward(loss)
+            else:
+                loss.backward()        
+
+
             if ((step + 1) % accum_iter == 0) or (step + 1 == len(data_loader)):
                 losses.append(_loss)
                 _loss = 0
@@ -281,6 +306,15 @@ def train_mem_model(config, encoder, dropout_layer, classifier, training_data, e
         {'params': classifier.parameters(), 'lr': 0.001}
     ])
 
+    if config.device0 == config.device1:
+        accelerator = Accelerator()
+        encoder = accelerator.prepare_model(encoder)
+        dropout_layer = accelerator.prepare_model(dropout_layer)
+        classifier = accelerator.prepare_model(classifier)
+        
+        optimizer = accelerator.prepare_optimizer(optimizer)
+        data_loader = accelerator.prepare_data_loader(data_loader)
+
     # accelerator = Accelerator()
     # encoder = accelerator.prepare_model(encoder)
     # dropout_layer = accelerator.prepare_model(dropout_layer)
@@ -406,8 +440,11 @@ def train_mem_model(config, encoder, dropout_layer, classifier, training_data, e
 
             _loss += loss.item()
             
-            loss.backward()
-            # accelerator.backward(loss)
+            if config.device0 == config.device1:
+                accelerator.backward(loss)
+            else:
+                loss.backward()
+
             if ((step + 1) % accum_iter == 0) or (step + 1 == len(data_loader)):
                 losses.append(_loss)
                 _loss = 0
@@ -676,25 +713,6 @@ def data_augmentation(config, encoder, train_data, prev_train_data):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--task", default="tacred", type=str)
-    parser.add_argument("--shot", default=5, type=str)
-    parser.add_argument('--config', default='config.ini')
-    args = parser.parse_args()
-    config = Config(args.config)
-
-    config.device0 = torch.device(config.device0)
-    config.device1 = torch.device(config.device1)
-    config.n_gpu = torch.cuda.device_count()
-    config.batch_size_per_step = int(config.batch_size / config.gradient_accumulation_steps)
-
-    config.task = args.task
-    config.shot = args.shot
-    config.step1_epochs = 5
-    config.step2_epochs = 15
-    config.step3_epochs = 20
-    config.temperature = 0.08
-
     if config.task == "FewRel":
         config.relation_file = "data/fewrel/relation_name.txt"
         config.rel_index = "data/fewrel/rel_index.npy"
@@ -750,7 +768,7 @@ if __name__ == '__main__':
         rel2id = sampler.rel2id
         id2sentence = sampler.get_id2sent()
         # encoder = Bert_Encoder(config=config).to(config.device)
-        encoder = LlamaLMClassification.from_pretrained("meta-llama/Llama-2-7b-hf",
+        encoder = GemmaLMClassification.from_pretrained("google/gemma-2b",
 #                                                   pad_token_id=32004,
 #                                                   torch_dtype=torch.float16,
 #                                                   quantization_config=bnb_config,
@@ -758,7 +776,7 @@ if __name__ == '__main__':
                                                     token="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",
                                                     device_map=device_map)
         peft_config = LoraConfig(task_type=TaskType.SEQ_CLS,
-                                target_modules=["q_proj", "v_proj", "o_proj", "lm_head"],
+                                target_modules=["q_proj", "v_proj", "gate_proj", "lm_head"],
                                 r=16,
                                 lora_alpha=32,
                                 lora_dropout=0.1,
