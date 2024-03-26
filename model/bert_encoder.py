@@ -5,6 +5,7 @@ import numpy as np
 from model.base_model import base_model
 from transformers import BertModel, BertConfig
 from transformers.models.llama.modeling_llama import *
+from transformers.models.gemma.modeling_gemma import *
 import torch
 
 
@@ -82,11 +83,11 @@ class Bert_Encoder(base_model):
             # output = self.layer_normalization(output)
         return output
     
-class LlamaClassification(LlamaPreTrainedModel):
+class GemmaClassification(GemmaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         # self.num_labels = config.num_labels
-        self.model = LlamaModel(config)
+        self.model = GemmaModel(config)
         # self.ln = nn.Linear(config.hidden_size, self.config.hidden_size, bias=True)
         # self.dropout = nn.Dropout(0.1)
 
@@ -158,7 +159,7 @@ class LlamaClassification(LlamaPreTrainedModel):
         # for each sample in the batch, acquire the positions of its [E11] and [E21]
         for i in range(input_ids.shape[0]):
             tokens = input_ids[i].cpu().numpy()
-            e11.append(np.argwhere(tokens == 2)[0][0] - 1)
+            e11.append(np.argwhere(tokens == 0)[0][0] - 1)
         
         output = []
 
@@ -195,12 +196,12 @@ class LlamaClassification(LlamaPreTrainedModel):
         # return self.dropout(logits)
         return output
     
-class LlamaLMClassification(LlamaPreTrainedModel):
+class GemmaLMClassification(GemmaPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = LlamaModel(config)
+        self.model = GemmaModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.info_nce_fc = nn.Linear(config.vocab_size, config.hidden_size , bias= False)
@@ -237,7 +238,7 @@ class LlamaLMClassification(LlamaPreTrainedModel):
     def get_decoder(self):
         return self.model
 
-    @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
+    # @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -252,31 +253,7 @@ class LlamaLMClassification(LlamaPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
-        r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, LlamaForCausalLM
-
-        >>> model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
-
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```"""
+        
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -304,7 +281,7 @@ class LlamaLMClassification(LlamaPreTrainedModel):
         for i in range(input_ids.shape[0]):
             tokens = input_ids[i].cpu().numpy()
             try:
-                e11.append(np.argwhere(tokens == 2)[0][0] - 1)
+                e11.append(np.argwhere(tokens == 0)[0][0] - 1)
             except:
                 e11.append(len(tokens) - 1)
         
