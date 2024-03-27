@@ -20,6 +20,7 @@ import torch.nn.functional as F
 import torch.nn as nn
 from tqdm import tqdm
 import wandb
+import json
 # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 # wandb.login(key = 'e0e0a2547f255a36f551d7b6a166b84e5139d276')
 parser = argparse.ArgumentParser()
@@ -699,13 +700,13 @@ def process(config, task, shot):
     config.task = task
     config.shot = shot
 
-    wandb.init(
-    project="LLM_RE",
-    name=f"SCKD-llama",
-    config={
-        "task": task,
-        "shot": shot
-    })
+    # wandb.init(
+    # project="LLM_RE",
+    # name=f"SCKD-llama",
+    # config={
+    #     "task": task,
+    #     "shot": shot
+    # })
 
     if config.task == "FewRel":
         config.relation_file = "data/fewrel/relation_name.txt"
@@ -938,12 +939,15 @@ def process(config, task, shot):
         print(avg_result_cur_test)
         print("avg_result_all_test")
         print(avg_result_all_test)
-        wandb.log({"avg_result_all_test": avg_result_all_test})
+        # wandb.log({"avg_result_all_test": avg_result_all_test})
         std_result_all_test = np.std(result_whole_test, 0)
         print("std_result_all_test")
         print(std_result_all_test)
-        wandb.log({"std_result_all_test": std_result_all_test})
-
+        # wandb.log({"std_result_all_test": std_result_all_test})
+        with open('log.json', 'a') as f:
+            json.dump({'task': task, 'shot': shot, 'avg_result_all_test': avg_result_all_test, 'std_result_all_test': std_result_all_test}, f)
+            f.write('\n')
+            
         accuracy = []
         temp_rel2id = [rel2id[x] for x in history_relations]
         map_relid2tempid = {k: v for v, k in enumerate(temp_rel2id)}
@@ -967,7 +971,7 @@ def process(config, task, shot):
         print("avg_fwt_whole")
         print(avg_fwt)
 
-    wandb.finish()
+    # wandb.finish()
 
 if __name__ == '__main__':
     process(config, task='tacred', shot=5)
