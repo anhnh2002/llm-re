@@ -23,7 +23,7 @@ from accelerate import Accelerator
 # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--task", default="tacred", type=str)
+parser.add_argument("--task", default="FewRel", type=str)
 parser.add_argument("--shot", default=5, type=str)
 parser.add_argument('--config', default='config.ini')
 args = parser.parse_args()
