@@ -51,24 +51,24 @@ device_map = {'model.embed_tokens': int(config.device0.index),
  'model.layers.5': int(config.device0.index),
  'model.layers.6': int(config.device0.index),
  'model.layers.7': int(config.device0.index),
- 'model.layers.8': int(config.device0.index),
- 'model.layers.9': int(config.device0.index),
- 'model.layers.10': int(config.device0.index),
- 'model.layers.11': int(config.device0.index),
- 'model.layers.12': int(config.device0.index),
- 'model.layers.13': int(config.device0.index),
- 'model.layers.14': int(config.device0.index),
- 'model.layers.15': int(config.device0.index),
- 'model.layers.16': int(config.device0.index),
- 'model.layers.17': int(config.device1.index),
- 'model.layers.18': int(config.device1.index),
- 'model.layers.19': int(config.device1.index),
- 'model.layers.20': int(config.device1.index),
- 'model.layers.21': int(config.device1.index),
- 'model.layers.22': int(config.device1.index),
- 'model.layers.23': int(config.device1.index),
- 'model.layers.24': int(config.device1.index),
- 'model.layers.25': int(config.device1.index),
+ 'model.layers.8': int(config.device2.index),
+ 'model.layers.9': int(config.device2.index),
+ 'model.layers.10': int(config.device2.index),
+ 'model.layers.11': int(config.device2.index),
+ 'model.layers.12': int(config.device2.index),
+ 'model.layers.13': int(config.device2.index),
+ 'model.layers.14': int(config.device2.index),
+ 'model.layers.15': int(config.device2.index),
+ 'model.layers.16': int(config.device2.index),
+ 'model.layers.17': int(config.device3.index),
+ 'model.layers.18': int(config.device3.index),
+ 'model.layers.19': int(config.device3.index),
+ 'model.layers.20': int(config.device3.index),
+ 'model.layers.21': int(config.device3.index),
+ 'model.layers.22': int(config.device3.index),
+ 'model.layers.23': int(config.device3.index),
+ 'model.layers.24': int(config.device3.index),
+ 'model.layers.25': int(config.device3.index),
  'model.layers.26': int(config.device1.index),
  'model.layers.27': int(config.device1.index),
  'model.layers.28': int(config.device1.index),
@@ -975,10 +975,10 @@ def process(config, task, shot):
 
 if __name__ == '__main__':
     process(config, task='tacred', shot=5)
-    process(config, task='tacred', shot=10)
+    # process(config, task='tacred', shot=10)
     process(config, task='FewRel', shot=5)
-    process(config, task='FewRel', shot=10)
-    process(config, task='FewRel', shot=2)
+    # process(config, task='FewRel', shot=10)
+    # process(config, task='FewRel', shot=2)
 
 #     if config.task == "FewRel":
 #         config.relation_file = "data/fewrel/relation_name.txt"
