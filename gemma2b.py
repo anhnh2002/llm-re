@@ -761,7 +761,7 @@ if __name__ == '__main__':
                                                     token="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",
                                                     device_map=device_map)
         peft_config = LoraConfig(task_type=TaskType.SEQ_CLS,
-                                target_modules=["q_proj", "v_proj", "gate_proj"],
+                                target_modules=["q_proj", "v_proj", "gate_proj", 'lm_head'],
                                 r=16,
                                 lora_alpha=32,
                                 lora_dropout=0.1,
