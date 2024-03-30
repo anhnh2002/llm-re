@@ -20,10 +20,11 @@ import torch.nn.functional as F
 import torch.nn as nn
 from tqdm import tqdm
 import wandb
+import json
 # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 # wandb.login(key = 'e0e0a2547f255a36f551d7b6a166b84e5139d276')
 parser = argparse.ArgumentParser()
-parser.add_argument("--task", default="FewRel", type=str)
+parser.add_argument("--task", default="tacred", type=str)
 parser.add_argument("--shot", default=5, type=str)
 parser.add_argument('--config', default='config.ini')
 args = parser.parse_args()
@@ -31,6 +32,8 @@ config = Config(args.config)
 
 config.device0 = torch.device(config.device0)
 config.device1 = torch.device(config.device1)
+config.device2 = torch.device(config.device2)
+config.device3 = torch.device(config.device3)
 config.n_gpu = torch.cuda.device_count()
 config.batch_size_per_step = int(config.batch_size / config.gradient_accumulation_steps)
 
@@ -50,24 +53,24 @@ device_map = {'model.embed_tokens': int(config.device0.index),
  'model.layers.5': int(config.device0.index),
  'model.layers.6': int(config.device0.index),
  'model.layers.7': int(config.device0.index),
- 'model.layers.8': int(config.device0.index),
- 'model.layers.9': int(config.device0.index),
- 'model.layers.10': int(config.device0.index),
- 'model.layers.11': int(config.device0.index),
- 'model.layers.12': int(config.device0.index),
- 'model.layers.13': int(config.device0.index),
- 'model.layers.14': int(config.device0.index),
- 'model.layers.15': int(config.device0.index),
- 'model.layers.16': int(config.device0.index),
- 'model.layers.17': int(config.device1.index),
- 'model.layers.18': int(config.device1.index),
- 'model.layers.19': int(config.device1.index),
- 'model.layers.20': int(config.device1.index),
- 'model.layers.21': int(config.device1.index),
- 'model.layers.22': int(config.device1.index),
- 'model.layers.23': int(config.device1.index),
- 'model.layers.24': int(config.device1.index),
- 'model.layers.25': int(config.device1.index),
+ 'model.layers.8': int(config.device2.index),
+ 'model.layers.9': int(config.device2.index),
+ 'model.layers.10': int(config.device2.index),
+ 'model.layers.11': int(config.device2.index),
+ 'model.layers.12': int(config.device2.index),
+ 'model.layers.13': int(config.device2.index),
+ 'model.layers.14': int(config.device2.index),
+ 'model.layers.15': int(config.device2.index),
+ 'model.layers.16': int(config.device2.index),
+ 'model.layers.17': int(config.device3.index),
+ 'model.layers.18': int(config.device3.index),
+ 'model.layers.19': int(config.device3.index),
+ 'model.layers.20': int(config.device3.index),
+ 'model.layers.21': int(config.device3.index),
+ 'model.layers.22': int(config.device3.index),
+ 'model.layers.23': int(config.device3.index),
+ 'model.layers.24': int(config.device3.index),
+ 'model.layers.25': int(config.device3.index),
  'model.layers.26': int(config.device1.index),
  'model.layers.27': int(config.device1.index),
  'model.layers.28': int(config.device1.index),
@@ -370,9 +373,7 @@ def train_mem_model(config, encoder, dropout_layer, classifier, training_data, e
                 neg_prototypes = neg_prototypes.squeeze()
                 f_pos = encoder.infoNCE_f(mask_output[i],outputs[i])
                 f_neg = encoder.infoNCE_f(mask_output[i],neg_prototypes )
-
                 
-
                 f_concat = torch.cat([f_pos,f_neg.squeeze()],dim=0)
                 # quick fix for large number
                 f_concat = torch.log(torch.max(f_concat, torch.tensor(1e-9).to(f_concat.device)))
@@ -508,7 +509,7 @@ def batch2device(batch_tuple, device):
 
 #     return correct/n
 
-def evaluate_strict_model(config, encoder, dropout_layer, classifier, test_data, seen_relations, map_relid2tempid):
+def evaluate_strict_model(config, encoder, dropout_layer, classifier, test_data, seen_relations, map_relid2tempid, rel2id):
     data_loader = get_data_loader(config, test_data, batch_size=1, shuffle=False)
     encoder.eval()
     dropout_layer.eval()
@@ -708,13 +709,13 @@ def process(config, task, shot):
     config.task = task
     config.shot = shot
 
-    wandb.init(
-    project="LLM_RE",
-    name=f"SCKD-llama",
-    config={
-        "task": task,
-        "shot": shot
-    })
+    # wandb.init(
+    # project="LLM_RE",
+    # name=f"SCKD-llama",
+    # config={
+    #     "task": task,
+    #     "shot": shot
+    # })
 
     if config.task == "FewRel":
         config.relation_file = "data/fewrel/relation_name.txt"
@@ -779,7 +780,7 @@ def process(config, task, shot):
                                                     token="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",
                                                     device_map=device_map)
         peft_config = LoraConfig(task_type=TaskType.SEQ_CLS,
-                                target_modules=["q_proj", "v_proj", "o_proj"],
+                                target_modules=["q_proj", "v_proj", "o_proj", "lm_head"],
                                 r=16,
                                 lora_alpha=32,
                                 lora_dropout=0.1,
@@ -839,7 +840,7 @@ def process(config, task, shot):
                 test_data_1 += test_data[relation]
 
             if steps != 0:
-                forward_acc = evaluate_strict_model(config, encoder, prev_dropout_layer, classifier, test_data_1, seen_relations, map_relid2tempid)
+                forward_acc = evaluate_strict_model(config, encoder, prev_dropout_layer, classifier, test_data_1, seen_relations, map_relid2tempid, rel2id)
                 forward_accs.append(forward_acc)
 
             train_simple_model(config, encoder, dropout_layer, classifier, train_data_for_initial, config.step1_epochs, map_relid2tempid)
@@ -912,8 +913,8 @@ def process(config, task, shot):
             # cur_acc = evaluate_strict_model(config, encoder, classifier, test_data_1, seen_relations, map_relid2tempid)
             # total_acc = evaluate_strict_model(config, encoder, classifier, test_data_2, seen_relations, map_relid2tempid)
 
-            cur_acc = evaluate_strict_model(config, encoder,dropout_layer,classifier, test_data_1, seen_relations, map_relid2tempid)
-            total_acc = evaluate_strict_model(config, encoder, dropout_layer, classifier, test_data_2, seen_relations, map_relid2tempid)
+            cur_acc = evaluate_strict_model(config, encoder,dropout_layer,classifier, test_data_1, seen_relations, map_relid2tempid, rel2id)
+            total_acc = evaluate_strict_model(config, encoder, dropout_layer, classifier, test_data_2, seen_relations, map_relid2tempid, rel2id)
 
             print(f'Restart Num {rou + 1}')
             print(f'task--{steps + 1}:')
@@ -929,7 +930,7 @@ def process(config, task, shot):
             for data in history_data:
                 # accuracy.append(
                 #     evaluate_strict_model(config, encoder, classifier, data, history_relations, map_relid2tempid))
-                accuracy.append(evaluate_strict_model(config, encoder, dropout_layer, classifier, data, seen_relations, map_relid2tempid))
+                accuracy.append(evaluate_strict_model(config, encoder, dropout_layer, classifier, data, seen_relations, map_relid2tempid, rel2id))
             print(accuracy)
 
             # prev_encoder = deepcopy(encoder)
@@ -947,17 +948,20 @@ def process(config, task, shot):
         print(avg_result_cur_test)
         print("avg_result_all_test")
         print(avg_result_all_test)
-        wandb.log({"avg_result_all_test": avg_result_all_test})
+        # wandb.log({"avg_result_all_test": avg_result_all_test})
         std_result_all_test = np.std(result_whole_test, 0)
         print("std_result_all_test")
         print(std_result_all_test)
-        wandb.log({"std_result_all_test": std_result_all_test})
-
+        # wandb.log({"std_result_all_test": std_result_all_test})
+        with open('log.json', 'a') as f:
+            json.dump({'task': task, 'shot': shot, 'avg_result_all_test': avg_result_all_test, 'std_result_all_test': std_result_all_test}, f)
+            f.write('\n')
+            
         accuracy = []
         temp_rel2id = [rel2id[x] for x in history_relations]
         map_relid2tempid = {k: v for v, k in enumerate(temp_rel2id)}
         for data in history_data:
-            accuracy.append(evaluate_strict_model(config, encoder, dropout_layer, classifier, data, history_relations, map_relid2tempid))
+            accuracy.append(evaluate_strict_model(config, encoder, dropout_layer, classifier, data, history_relations, map_relid2tempid, rel2id))
         print(accuracy)
         bwt = 0.0
         for k in range(len(accuracy)-1):
@@ -976,14 +980,14 @@ def process(config, task, shot):
         print("avg_fwt_whole")
         print(avg_fwt)
 
-    wandb.finish()
+    # wandb.finish()
 
 if __name__ == '__main__':
     process(config, task='tacred', shot=5)
-    process(config, task='tacred', shot=10)
+    # process(config, task='tacred', shot=10)
     process(config, task='FewRel', shot=5)
-    process(config, task='FewRel', shot=10)
-    process(config, task='FewRel', shot=2)
+    # process(config, task='FewRel', shot=10)
+    # process(config, task='FewRel', shot=2)
 
 #     if config.task == "FewRel":
 #         config.relation_file = "data/fewrel/relation_name.txt"
