@@ -23,7 +23,7 @@ from accelerate import Accelerator
 # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--task", default="tacred", type=str)
+parser.add_argument("--task", default="FewRel", type=str)
 parser.add_argument("--shot", default=5, type=str)
 parser.add_argument('--config', default='config.ini')
 args = parser.parse_args()
@@ -345,6 +345,15 @@ def train_mem_model(config, encoder, dropout_layer, classifier, training_data, e
             infoNCE_loss = 0
             for i in range(output.shape[0]):
                 neg_prototypes = [prototype[rel_id] for rel_id in prototype.keys() if rel_id != origin_labels[i].item()]
+                neg_samples_grouped = [new_relation_data[rel_id] for rel_id in new_relation_data.keys() if rel_id != origin_labels[i].item()]
+                neg_samples = []
+                for neg in neg_samples_grouped:
+                    neg_samples.extend(neg)
+                random.shuffle(neg_samples)
+
+                contrastive_batch = 256
+                neg_samples = neg_samples[:contrastive_batch - len(neg_prototypes)]
+                neg_prototypes.extend(neg_samples)
                 neg_prototypes = torch.stack(neg_prototypes).to(mask_output.device)
                 
                 #--- prepare batch of negative samples 
@@ -752,7 +761,7 @@ if __name__ == '__main__':
                                                     token="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",
                                                     device_map=device_map)
         peft_config = LoraConfig(task_type=TaskType.SEQ_CLS,
-                                target_modules=["q_proj", "v_proj", "gate_proj", "lm_head"],
+                                target_modules=["q_proj", "v_proj", "gate_proj"],
                                 r=16,
                                 lora_alpha=32,
                                 lora_dropout=0.1,
