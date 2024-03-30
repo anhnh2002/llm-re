@@ -21,6 +21,8 @@ import torch.nn as nn
 from tqdm import tqdm
 import wandb
 import json
+from accelerate import Accelerator
+
 # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 # wandb.login(key = 'e0e0a2547f255a36f551d7b6a166b84e5139d276')
 parser = argparse.ArgumentParser()
@@ -103,13 +105,13 @@ def train_simple_model(config, encoder, dropout_layer, classifier, training_data
         {'params': classifier.parameters(), 'lr': 0.001}
     ])
 
-    # accelerator = Accelerator()
-    # encoder = accelerator.prepare_model(encoder)
-    # dropout_layer = accelerator.prepare_model(dropout_layer)
-    # classifier = accelerator.prepare_model(classifier)
+    accelerator = Accelerator()
+    encoder = accelerator.prepare_model(encoder)
+    dropout_layer = accelerator.prepare_model(dropout_layer)
+    classifier = accelerator.prepare_model(classifier)
     
-    # optimizer = accelerator.prepare_optimizer(optimizer)
-    # data_loader = accelerator.prepare_data_loader(data_loader)
+    optimizer = accelerator.prepare_optimizer(optimizer)
+    data_loader = accelerator.prepare_data_loader(data_loader)
 
     for epoch_i in range(epochs):
         losses = []
@@ -132,8 +134,8 @@ def train_simple_model(config, encoder, dropout_layer, classifier, training_data
 
             _loss += loss.item()
             
-            loss.backward()
-            # accelerator.backward(loss)
+            # loss.backward()
+            accelerator.backward(loss)
             if ((step + 1) % accum_iter == 0) or (step + 1 == len(data_loader)):
                 losses.append(_loss)
                 _loss = 0
@@ -215,13 +217,13 @@ def train_first(config, encoder, dropout_layer, classifier, training_data, epoch
         {'params': classifier.parameters(), 'lr': 0.001}
     ])
 
-    # accelerator = Accelerator()
-    # encoder = accelerator.prepare_model(encoder)
-    # dropout_layer = accelerator.prepare_model(dropout_layer)
-    # classifier = accelerator.prepare_model(classifier)
+    accelerator = Accelerator()
+    encoder = accelerator.prepare_model(encoder)
+    dropout_layer = accelerator.prepare_model(dropout_layer)
+    classifier = accelerator.prepare_model(classifier)
     
-    # optimizer = accelerator.prepare_optimizer(optimizer)
-    # data_loader = accelerator.prepare_data_loader(data_loader)
+    optimizer = accelerator.prepare_optimizer(optimizer)
+    data_loader = accelerator.prepare_data_loader(data_loader)
 
     triplet_loss = nn.TripletMarginLoss(margin=1.0, p=2)
     for epoch_i in range(epochs):
@@ -261,8 +263,8 @@ def train_first(config, encoder, dropout_layer, classifier, training_data, epoch
 
             _loss += loss.item()
             
-            loss.backward()
-            # accelerator.backward(loss)
+            # loss.backward()
+            accelerator.backward(loss)
             if ((step + 1) % accum_iter == 0) or (step + 1 == len(data_loader)):
                 losses.append(_loss)
                 _loss = 0
@@ -763,7 +765,7 @@ def process(config, task, shot):
     relation_divides = []
     for i in range(10):
         relation_divides.append([])
-    for rou in range(config.total_round):
+    for rou in range(1):
         test_cur = []
         test_total = []
         random.seed(config.seed+rou*100)
