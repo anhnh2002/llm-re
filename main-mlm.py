@@ -32,6 +32,8 @@ config = Config(args.config)
 
 config.device0 = torch.device(config.device0)
 config.device1 = torch.device(config.device1)
+config.device2 = torch.device(config.device2)
+config.device3 = torch.device(config.device3)
 config.n_gpu = torch.cuda.device_count()
 config.batch_size_per_step = int(config.batch_size / config.gradient_accumulation_steps)
 
@@ -355,14 +357,22 @@ def train_mem_model(config, encoder, dropout_layer, classifier, training_data, e
             infoNCE_loss = 0
             for i in range(output.shape[0]):
                 neg_prototypes = [prototype[rel_id] for rel_id in prototype.keys() if rel_id != origin_labels[i].item()]
+                neg_samples_grouped = [new_relation_data[rel_id] for rel_id in new_relation_data.keys() if rel_id != origin_labels[i].item()]
+                neg_samples = []
+                for neg in neg_samples_grouped:
+                    neg_samples.extend(neg)
+                random.shuffle(neg_samples)
+
+                contrastive_batch = 256
+                neg_samples = neg_samples[:contrastive_batch - len(neg_prototypes)]
+                neg_prototypes.extend(neg_samples)
                 neg_prototypes = torch.stack(neg_prototypes).to(mask_output.device)
-                
+
                 #--- prepare batch of negative samples 
                 neg_prototypes.requires_grad_ = False
                 neg_prototypes = neg_prototypes.squeeze()
                 f_pos = encoder.infoNCE_f(mask_output[i],outputs[i])
-                f_neg = encoder.infoNCE_f(mask_output[i],neg_prototypes)
-
+                f_neg = encoder.infoNCE_f(mask_output[i],neg_prototypes )
                 
 
                 f_concat = torch.cat([f_pos,f_neg.squeeze()],dim=0)
