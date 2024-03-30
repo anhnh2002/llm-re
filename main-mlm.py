@@ -374,7 +374,6 @@ def train_mem_model(config, encoder, dropout_layer, classifier, training_data, e
                 f_pos = encoder.infoNCE_f(mask_output[i],outputs[i])
                 f_neg = encoder.infoNCE_f(mask_output[i],neg_prototypes )
                 
-
                 f_concat = torch.cat([f_pos,f_neg.squeeze()],dim=0)
                 # quick fix for large number
                 f_concat = torch.log(torch.max(f_concat, torch.tensor(1e-9).to(f_concat.device)))
@@ -510,7 +509,7 @@ def batch2device(batch_tuple, device):
 
 #     return correct/n
 
-def evaluate_strict_model(config, encoder, dropout_layer, classifier, test_data, seen_relations, map_relid2tempid):
+def evaluate_strict_model(config, encoder, dropout_layer, classifier, test_data, seen_relations, map_relid2tempid, rel2id):
     data_loader = get_data_loader(config, test_data, batch_size=1, shuffle=False)
     encoder.eval()
     dropout_layer.eval()
@@ -841,7 +840,7 @@ def process(config, task, shot):
                 test_data_1 += test_data[relation]
 
             if steps != 0:
-                forward_acc = evaluate_strict_model(config, encoder, prev_dropout_layer, classifier, test_data_1, seen_relations, map_relid2tempid)
+                forward_acc = evaluate_strict_model(config, encoder, prev_dropout_layer, classifier, test_data_1, seen_relations, map_relid2tempid, rel2id)
                 forward_accs.append(forward_acc)
 
             train_simple_model(config, encoder, dropout_layer, classifier, train_data_for_initial, config.step1_epochs, map_relid2tempid)
@@ -914,8 +913,8 @@ def process(config, task, shot):
             # cur_acc = evaluate_strict_model(config, encoder, classifier, test_data_1, seen_relations, map_relid2tempid)
             # total_acc = evaluate_strict_model(config, encoder, classifier, test_data_2, seen_relations, map_relid2tempid)
 
-            cur_acc = evaluate_strict_model(config, encoder,dropout_layer,classifier, test_data_1, seen_relations, map_relid2tempid)
-            total_acc = evaluate_strict_model(config, encoder, dropout_layer, classifier, test_data_2, seen_relations, map_relid2tempid)
+            cur_acc = evaluate_strict_model(config, encoder,dropout_layer,classifier, test_data_1, seen_relations, map_relid2tempid, rel2id)
+            total_acc = evaluate_strict_model(config, encoder, dropout_layer, classifier, test_data_2, seen_relations, map_relid2tempid, rel2id)
 
             print(f'Restart Num {rou + 1}')
             print(f'task--{steps + 1}:')
@@ -931,7 +930,7 @@ def process(config, task, shot):
             for data in history_data:
                 # accuracy.append(
                 #     evaluate_strict_model(config, encoder, classifier, data, history_relations, map_relid2tempid))
-                accuracy.append(evaluate_strict_model(config, encoder, dropout_layer, classifier, data, seen_relations, map_relid2tempid))
+                accuracy.append(evaluate_strict_model(config, encoder, dropout_layer, classifier, data, seen_relations, map_relid2tempid, rel2id))
             print(accuracy)
 
             # prev_encoder = deepcopy(encoder)
@@ -962,7 +961,7 @@ def process(config, task, shot):
         temp_rel2id = [rel2id[x] for x in history_relations]
         map_relid2tempid = {k: v for v, k in enumerate(temp_rel2id)}
         for data in history_data:
-            accuracy.append(evaluate_strict_model(config, encoder, dropout_layer, classifier, data, history_relations, map_relid2tempid))
+            accuracy.append(evaluate_strict_model(config, encoder, dropout_layer, classifier, data, history_relations, map_relid2tempid, rel2id))
         print(accuracy)
         bwt = 0.0
         for k in range(len(accuracy)-1):
@@ -989,261 +988,3 @@ if __name__ == '__main__':
     process(config, task='FewRel', shot=5)
     # process(config, task='FewRel', shot=10)
     # process(config, task='FewRel', shot=2)
-
-#     if config.task == "FewRel":
-#         config.relation_file = "data/fewrel/relation_name.txt"
-#         config.rel_index = "data/fewrel/rel_index.npy"
-#         config.rel_feature = "data/fewrel/rel_feature.npy"
-#         config.rel_des_file = "data/fewrel/relation_description.txt"
-#         config.num_of_relation = 80
-#         if config.shot == 5:
-#             config.rel_cluster_label = "data/fewrel/CFRLdata_10_100_10_5/rel_cluster_label_0.npy"
-#             config.training_file = "data/fewrel/CFRLdata_10_100_10_5/train_0.txt"
-#             config.valid_file = "data/fewrel/CFRLdata_10_100_10_5/valid_0.txt"
-#             config.test_file = "data/fewrel/CFRLdata_10_100_10_5/test_0.txt"
-#         elif config.shot == 10:
-#             config.rel_cluster_label = "data/fewrel/CFRLdata_10_100_10_10/rel_cluster_label_0.npy"
-#             config.training_file = "data/fewrel/CFRLdata_10_100_10_10/train_0.txt"
-#             config.valid_file = "data/fewrel/CFRLdata_10_100_10_10/valid_0.txt"
-#             config.test_file = "data/fewrel/CFRLdata_10_100_10_10/test_0.txt"
-#         else:
-#             config.rel_cluster_label = "data/fewrel/CFRLdata_10_100_10_2/rel_cluster_label_0.npy"
-#             config.training_file = "data/fewrel/CFRLdata_10_100_10_2/train_0.txt"
-#             config.valid_file = "data/fewrel/CFRLdata_10_100_10_2/valid_0.txt"
-#             config.test_file = "data/fewrel/CFRLdata_10_100_10_2/test_0.txt"
-#     else:
-#         config.relation_file = "data/tacred/relation_name.txt"
-#         config.rel_index = "data/tacred/rel_index.npy"
-#         config.rel_feature = "data/tacred/rel_feature.npy"
-#         config.num_of_relation = 41
-#         if config.shot == 5:
-#             config.rel_cluster_label = "data/tacred/CFRLdata_10_100_10_5/rel_cluster_label_0.npy"
-#             config.training_file = "data/tacred/CFRLdata_10_100_10_5/train_0.txt"
-#             config.valid_file = "data/tacred/CFRLdata_10_100_10_5/valid_0.txt"
-#             config.test_file = "data/tacred/CFRLdata_10_100_10_5/test_0.txt"
-#         else:
-#             config.rel_cluster_label = "data/tacred/CFRLdata_10_100_10_10/rel_cluster_label_0.npy"
-#             config.training_file = "data/tacred/CFRLdata_10_100_10_10/train_0.txt"
-#             config.valid_file = "data/tacred/CFRLdata_10_100_10_10/valid_0.txt"
-#             config.test_file = "data/tacred/CFRLdata_10_100_10_10/test_0.txt"
-
-#     result_cur_test = []
-#     result_whole_test = []
-#     bwt_whole = []
-#     fwt_whole = []
-#     X = []
-#     Y = []
-#     relation_divides = []
-#     for i in range(10):
-#         relation_divides.append([])
-#     for rou in range(config.total_round):
-#         test_cur = []
-#         test_total = []
-#         random.seed(config.seed+rou*100)
-#         sampler = data_sampler(config=config, seed=config.seed+rou*100)
-#         id2rel = sampler.id2rel
-#         rel2id = sampler.rel2id
-#         id2sentence = sampler.get_id2sent()
-#         # encoder = Bert_Encoder(config=config).to(config.device)
-#         encoder = LlamaLMClassification.from_pretrained("meta-llama/Llama-2-7b-hf",
-# #                                                   pad_token_id=32004,
-# #                                                   torch_dtype=torch.float16,
-# #                                                   quantization_config=bnb_config,
-#                                                 #   load_in_8bit = True,
-#                                                     token="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",
-#                                                     device_map=device_map)
-#         peft_config = LoraConfig(task_type=TaskType.SEQ_CLS,
-#                                 target_modules=["q_proj", "v_proj", "o_proj", "lm_head"],
-#                                 r=16,
-#                                 lora_alpha=32,
-#                                 lora_dropout=0.1,
-#                                 modules_to_save=["info_nce_fc"])
-#         # model = prepare_model_for_int8_training(model)
-#         encoder = get_peft_model(encoder, peft_config)
-#         dropout_layer = Dropout_Layer(config=config).to(config.device1)
-#         num_class = len(sampler.id2rel)
-
-#         memorized_samples = {}
-#         memory = collections.defaultdict(list)
-#         history_relations = []
-#         history_data = []
-#         prev_relations = []
-#         classifier = None
-#         prev_classifier = None
-#         prev_encoder = None
-#         prev_dropout_layer = None
-#         relation_standard = {}
-#         forward_accs = []
-#         for steps, (training_data, valid_data, test_data, current_relations, historic_test_data, seen_relations) in enumerate(sampler):
-#             print(current_relations)
-
-#             prev_relations = history_relations[:]
-#             train_data_for_initial = []
-#             count = 0
-#             for relation in current_relations:
-#                 history_relations.append(relation)
-#                 train_data_for_initial += training_data[relation]
-#                 relation_divides[count].append(float(rel2id[relation]))
-#                 count += 1
-
-
-#             temp_rel2id = [rel2id[x] for x in seen_relations]
-#             map_relid2tempid = {k: v for v, k in enumerate(temp_rel2id)}
-#             prev_relation_index = []
-#             prev_samples = []
-#             for relation in prev_relations:
-#                 prev_relation_index.append(map_relid2tempid[rel2id[relation]])
-#                 prev_samples += memorized_samples[relation]
-#             prev_relation_index = torch.tensor(prev_relation_index).to(config.device1)
-
-#             classifier = Softmax_Layer(input_size=config.encoder_output_size, num_class=len(history_relations)).to(
-#                 config.device1)
-
-#             temp_protos = {}
-#             for relation in current_relations:
-#                 proto, _ = get_proto(config, encoder, dropout_layer, training_data[relation])
-#                 temp_protos[rel2id[relation]] = proto
-
-#             for relation in prev_relations:
-#                 proto, _ = get_proto(config, encoder, dropout_layer, memorized_samples[relation])
-#                 temp_protos[rel2id[relation]] = proto
-
-#             test_data_1 = []
-#             for relation in current_relations:
-#                 test_data_1 += test_data[relation]
-
-#             if steps != 0:
-#                 forward_acc = evaluate_strict_model(config, encoder, prev_dropout_layer, classifier, test_data_1, seen_relations, map_relid2tempid)
-#                 forward_accs.append(forward_acc)
-
-#             train_simple_model(config, encoder, dropout_layer, classifier, train_data_for_initial, config.step1_epochs, map_relid2tempid)
-#             print(f"simple finished")
-#             # expanded_train_data_for_initial, expanded_prev_samples = data_augmentation(config, encoder,
-#             #                                                                            train_data_for_initial,
-#             #                                                                            prev_samples)
-
-
-#             temp_protos = {}
-
-#             for relation in current_relations:
-#                 proto, standard = get_proto(config,encoder,dropout_layer,training_data[relation])
-#                 temp_protos[rel2id[relation]] = proto
-#                 relation_standard[rel2id[relation]] = standard
-
-
-#             for relation in prev_relations:
-#                 proto, _ = get_proto(config,encoder,dropout_layer,memorized_samples[relation])
-#                 temp_protos[rel2id[relation]] = proto
-
-#             new_relation_data = generate_relation_data(temp_protos, relation_standard)
-
-#             for relation in current_relations:
-#                 new_relation_data[rel2id[relation]].extend(generate_current_relation_data(config, encoder,dropout_layer,training_data[relation]))
-
-#             # expanded_train_data_for_initial, expanded_prev_samples = data_augmentation(config, encoder,
-#             #                                                                            train_data_for_initial,
-#             #                                                                            prev_samples)
-#             # torch.cuda.empty_cache()
-#             # print(len(train_data_for_initial))
-#             # print(len(expanded_train_data_for_initial))
-
-#             train_mem_model(config, encoder, dropout_layer, classifier, train_data_for_initial, config.step2_epochs, map_relid2tempid, new_relation_data,
-#                         prev_encoder, prev_dropout_layer, prev_classifier, prev_relation_index, temp_protos)
-#             print(f"first finished")
-
-#             for relation in current_relations:
-#                 memorized_samples[relation] = select_data(config, encoder, dropout_layer, training_data[relation])
-#                 memory[rel2id[relation]] = select_data(config, encoder, dropout_layer, training_data[relation])
-
-#             train_data_for_memory = []
-#             # train_data_for_memory += expanded_prev_samples
-#             train_data_for_memory += prev_samples
-#             for relation in current_relations:
-#                 train_data_for_memory += memorized_samples[relation]
-#             print(len(seen_relations))
-#             print(len(train_data_for_memory))
-
-#             temp_protos = {}
-#             for relation in seen_relations:
-#                 proto, _ = get_proto(config, encoder, dropout_layer, memorized_samples[relation])
-#                 temp_protos[rel2id[relation]] = proto
-
-#             train_mem_model(config, encoder, dropout_layer, classifier, train_data_for_memory, config.step3_epochs, map_relid2tempid, new_relation_data,
-#                         prev_encoder, prev_dropout_layer, prev_classifier, prev_relation_index, temp_protos)
-#             print(f"memory finished")
-#             test_data_1 = []
-#             for relation in current_relations:
-#                 test_data_1 += test_data[relation]
-
-#             test_data_2 = []
-#             for relation in seen_relations:
-#                 test_data_2 += historic_test_data[relation]
-#             history_data.append(test_data_1)
-
-
-#             print(len(test_data_1))
-#             print(len(test_data_2))
-#             # cur_acc = evaluate_strict_model(config, encoder, classifier, test_data_1, seen_relations, map_relid2tempid)
-#             # total_acc = evaluate_strict_model(config, encoder, classifier, test_data_2, seen_relations, map_relid2tempid)
-
-#             cur_acc = evaluate_strict_model(config, encoder,dropout_layer,classifier, test_data_1, seen_relations, map_relid2tempid)
-#             total_acc = evaluate_strict_model(config, encoder, dropout_layer, classifier, test_data_2, seen_relations, map_relid2tempid)
-
-#             print(f'Restart Num {rou + 1}')
-#             print(f'task--{steps + 1}:')
-#             print(f'current test acc:{cur_acc}')
-#             print(f'history test acc:{total_acc}')
-#             test_cur.append(cur_acc)
-#             test_total.append(total_acc)
-#             print(test_cur)
-#             print(test_total)
-#             accuracy = []
-#             temp_rel2id = [rel2id[x] for x in history_relations]
-#             map_relid2tempid = {k: v for v, k in enumerate(temp_rel2id)}
-#             for data in history_data:
-#                 # accuracy.append(
-#                 #     evaluate_strict_model(config, encoder, classifier, data, history_relations, map_relid2tempid))
-#                 accuracy.append(evaluate_strict_model(config, encoder, dropout_layer, classifier, data, seen_relations, map_relid2tempid))
-#             print(accuracy)
-
-#             # prev_encoder = deepcopy(encoder)
-#             prev_encoder = "abc"
-#             prev_dropout_layer = deepcopy(dropout_layer)
-#             prev_classifier = deepcopy(classifier)
-#             # torch.cuda.empty_cache()
-#         result_cur_test.append(np.array(test_cur))
-#         result_whole_test.append(np.array(test_total)*100)
-#         print("result_whole_test")
-#         print(result_whole_test)
-#         avg_result_cur_test = np.average(result_cur_test, 0)
-#         avg_result_all_test = np.average(result_whole_test, 0)
-#         print("avg_result_cur_test")
-#         print(avg_result_cur_test)
-#         print("avg_result_all_test")
-#         print(avg_result_all_test)
-#         std_result_all_test = np.std(result_whole_test, 0)
-#         print("std_result_all_test")
-#         print(std_result_all_test)
-
-#         accuracy = []
-#         temp_rel2id = [rel2id[x] for x in history_relations]
-#         map_relid2tempid = {k: v for v, k in enumerate(temp_rel2id)}
-#         for data in history_data:
-#             accuracy.append(evaluate_strict_model(config, encoder, dropout_layer, classifier, data, history_relations, map_relid2tempid))
-#         print(accuracy)
-#         bwt = 0.0
-#         for k in range(len(accuracy)-1):
-#             bwt += accuracy[k]-test_cur[k]
-#         bwt /= len(accuracy)-1
-#         bwt_whole.append(bwt)
-#         fwt_whole.append(np.average(np.array(forward_accs)))
-#         print("bwt_whole")
-#         print(bwt_whole)
-#         print("fwt_whole")
-#         print(fwt_whole)
-#         avg_bwt = np.average(np.array(bwt_whole))
-#         print("avg_bwt_whole")
-#         print(avg_bwt)
-#         avg_fwt = np.average(np.array(fwt_whole))
-#         print("avg_fwt_whole")
-#         print(avg_fwt)
