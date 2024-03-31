@@ -39,22 +39,22 @@ device_map = {'model.embed_tokens': 0,
  'model.layers.14': 0,
  'model.layers.15': 0,
  'model.layers.16': 0,
- 'model.layers.17': 0,
- 'model.layers.18': 0,
- 'model.layers.19': 0,
- 'model.layers.20': 0,
- 'model.layers.21': 0,
- 'model.layers.22': 0,
- 'model.layers.23': 0,
- 'model.layers.24': 0,
- 'model.layers.25': 0,
- 'model.layers.26': 0,
- 'model.layers.27': 0,
- 'model.layers.28': 0,
- 'model.layers.29': 0,
- 'model.layers.30': 0,
- 'model.layers.31': 0,
- 'model.norm': 0}
+ 'model.layers.17': 1,
+ 'model.layers.18': 1,
+ 'model.layers.19': 1,
+ 'model.layers.20': 1,
+ 'model.layers.21': 1,
+ 'model.layers.22': 1,
+ 'model.layers.23': 1,
+ 'model.layers.24': 1,
+ 'model.layers.25': 1,
+ 'model.layers.26': 1,
+ 'model.layers.27': 1,
+ 'model.layers.28': 1,
+ 'model.layers.29': 1,
+ 'model.layers.30': 1,
+ 'model.layers.31': 1,
+ 'model.norm': 1}
 
 
 def train_simple_model(config, encoder, dropout_layer, classifier, training_data, epochs, map_relid2tempid):
@@ -73,7 +73,7 @@ def train_simple_model(config, encoder, dropout_layer, classifier, training_data
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam([
-        {'params': trainable_params, 'lr': 0.00001},
+        {'params': trainable_params, 'lr': 0.00002},
         {'params': dropout_layer.parameters(), 'lr': 0.00001},
         {'params': classifier.parameters(), 'lr': 0.001}
     ])
@@ -271,7 +271,7 @@ def train_mem_model(config, encoder, dropout_layer, classifier, training_data, e
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam([
-        {'params': trainable_params, 'lr': 0.00001},
+        {'params': trainable_params, 'lr': 0.00002},
         {'params': dropout_layer.parameters(), 'lr': 0.00001},
         {'params': classifier.parameters(), 'lr': 0.001}
     ])
