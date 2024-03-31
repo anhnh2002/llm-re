@@ -18,6 +18,7 @@ import collections
 from copy import deepcopy
 import torch.nn.functional as F
 import torch.nn as nn
+from accelerate import Accelerator
 # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
 device_map = {'model.embed_tokens': 0,
@@ -37,23 +38,23 @@ device_map = {'model.embed_tokens': 0,
  'model.layers.13': 0,
  'model.layers.14': 0,
  'model.layers.15': 0,
- 'model.layers.16': 1,
- 'model.layers.17': 1,
- 'model.layers.18': 1,
- 'model.layers.19': 1,
- 'model.layers.20': 1,
- 'model.layers.21': 1,
- 'model.layers.22': 1,
- 'model.layers.23': 1,
- 'model.layers.24': 1,
- 'model.layers.25': 1,
- 'model.layers.26': 1,
- 'model.layers.27': 1,
- 'model.layers.28': 1,
- 'model.layers.29': 1,
- 'model.layers.30': 1,
- 'model.layers.31': 1,
- 'model.norm': 1}
+ 'model.layers.16': 0,
+ 'model.layers.17': 0,
+ 'model.layers.18': 0,
+ 'model.layers.19': 0,
+ 'model.layers.20': 0,
+ 'model.layers.21': 0,
+ 'model.layers.22': 0,
+ 'model.layers.23': 0,
+ 'model.layers.24': 0,
+ 'model.layers.25': 0,
+ 'model.layers.26': 0,
+ 'model.layers.27': 0,
+ 'model.layers.28': 0,
+ 'model.layers.29': 0,
+ 'model.layers.30': 0,
+ 'model.layers.31': 0,
+ 'model.norm': 0}
 
 
 def train_simple_model(config, encoder, dropout_layer, classifier, training_data, epochs, map_relid2tempid):
@@ -77,13 +78,13 @@ def train_simple_model(config, encoder, dropout_layer, classifier, training_data
         {'params': classifier.parameters(), 'lr': 0.001}
     ])
 
-    # accelerator = Accelerator()
-    # encoder = accelerator.prepare_model(encoder)
-    # dropout_layer = accelerator.prepare_model(dropout_layer)
-    # classifier = accelerator.prepare_model(classifier)
+    accelerator = Accelerator()
+    encoder = accelerator.prepare_model(encoder)
+    dropout_layer = accelerator.prepare_model(dropout_layer)
+    classifier = accelerator.prepare_model(classifier)
     
-    # optimizer = accelerator.prepare_optimizer(optimizer)
-    # data_loader = accelerator.prepare_data_loader(data_loader)
+    optimizer = accelerator.prepare_optimizer(optimizer)
+    data_loader = accelerator.prepare_data_loader(data_loader)
 
     for epoch_i in range(epochs):
         losses = []
@@ -105,8 +106,8 @@ def train_simple_model(config, encoder, dropout_layer, classifier, training_data
 
             _loss += loss.item()
             
-            loss.backward()
-            # accelerator.backward(loss)
+            # loss.backward()
+            accelerator.backward(loss)
             if ((step + 1) % accum_iter == 0) or (step + 1 == len(data_loader)):
                 losses.append(_loss)
                 _loss = 0
@@ -275,13 +276,13 @@ def train_mem_model(config, encoder, dropout_layer, classifier, training_data, e
         {'params': classifier.parameters(), 'lr': 0.001}
     ])
 
-    # accelerator = Accelerator()
-    # encoder = accelerator.prepare_model(encoder)
-    # dropout_layer = accelerator.prepare_model(dropout_layer)
-    # classifier = accelerator.prepare_model(classifier)
+    accelerator = Accelerator()
+    encoder = accelerator.prepare_model(encoder)
+    dropout_layer = accelerator.prepare_model(dropout_layer)
+    classifier = accelerator.prepare_model(classifier)
     
-    # optimizer = accelerator.prepare_optimizer(optimizer)
-    # data_loader = accelerator.prepare_data_loader(data_loader)
+    optimizer = accelerator.prepare_optimizer(optimizer)
+    data_loader = accelerator.prepare_data_loader(data_loader)
 
     triplet_loss = nn.TripletMarginLoss(margin=1.0, p=2)
     distill_criterion = nn.CosineEmbeddingLoss()
@@ -375,8 +376,8 @@ def train_mem_model(config, encoder, dropout_layer, classifier, training_data, e
 
             _loss += loss.item()
             
-            loss.backward()
-            # accelerator.backward(loss)
+            # loss.backward()
+            accelerator.backward(loss)
             if ((step + 1) % accum_iter == 0) or (step + 1 == len(data_loader)):
                 losses.append(_loss)
                 _loss = 0
@@ -705,7 +706,7 @@ if __name__ == '__main__':
     relation_divides = []
     for i in range(10):
         relation_divides.append([])
-    for rou in range(config.total_round):
+    for rou in range(1):
         test_cur = []
         test_total = []
         random.seed(config.seed+rou*100)
