@@ -19,7 +19,7 @@ class data_set(Dataset):
         label = torch.tensor([item['relation'] for item in data])
         neg_labels = [torch.tensor(item['neg_labels']) for item in data]
         tokens = [torch.tensor(item['tokens']) for item in data]
-        att_mask = [torch.tensor(item['att_mask']) for item in data]
+        att_mask = torch.tensor([item['att_mask'] for item in data])
         id = [torch.tensor(item['id']) for item in data]
         return (
             label,

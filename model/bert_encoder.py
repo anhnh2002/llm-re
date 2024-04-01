@@ -158,7 +158,10 @@ class LlamaClassification(LlamaPreTrainedModel):
         # for each sample in the batch, acquire the positions of its [E11] and [E21]
         for i in range(input_ids.shape[0]):
             tokens = input_ids[i].cpu().numpy()
-            e11.append(np.argwhere(tokens == 2)[0][0] - 1)
+            try:
+                e11.append(np.argwhere(tokens == 2)[0][0] - 1)
+            except:
+                e11.append(len(tokens) - 1)
         
         output = []
 
