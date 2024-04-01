@@ -78,13 +78,13 @@ def train_simple_model(config, encoder, dropout_layer, classifier, training_data
         {'params': classifier.parameters(), 'lr': 0.001}
     ])
 
-    accelerator = Accelerator()
-    encoder = accelerator.prepare_model(encoder)
-    dropout_layer = accelerator.prepare_model(dropout_layer)
-    classifier = accelerator.prepare_model(classifier)
+    # accelerator = Accelerator()
+    # encoder = accelerator.prepare_model(encoder)
+    # dropout_layer = accelerator.prepare_model(dropout_layer)
+    # classifier = accelerator.prepare_model(classifier)
     
-    optimizer = accelerator.prepare_optimizer(optimizer)
-    data_loader = accelerator.prepare_data_loader(data_loader)
+    # optimizer = accelerator.prepare_optimizer(optimizer)
+    # data_loader = accelerator.prepare_data_loader(data_loader)
 
     for epoch_i in range(epochs):
         losses = []
@@ -106,8 +106,8 @@ def train_simple_model(config, encoder, dropout_layer, classifier, training_data
 
             _loss += loss.item()
             
-            # loss.backward()
-            accelerator.backward(loss)
+            loss.backward()
+            # accelerator.backward(loss)
             if ((step + 1) % accum_iter == 0) or (step + 1 == len(data_loader)):
                 losses.append(_loss)
                 _loss = 0
@@ -276,13 +276,13 @@ def train_mem_model(config, encoder, dropout_layer, classifier, training_data, e
         {'params': classifier.parameters(), 'lr': 0.001}
     ])
 
-    accelerator = Accelerator()
-    encoder = accelerator.prepare_model(encoder)
-    dropout_layer = accelerator.prepare_model(dropout_layer)
-    classifier = accelerator.prepare_model(classifier)
+    # accelerator = Accelerator()
+    # encoder = accelerator.prepare_model(encoder)
+    # dropout_layer = accelerator.prepare_model(dropout_layer)
+    # classifier = accelerator.prepare_model(classifier)
     
-    optimizer = accelerator.prepare_optimizer(optimizer)
-    data_loader = accelerator.prepare_data_loader(data_loader)
+    # optimizer = accelerator.prepare_optimizer(optimizer)
+    # data_loader = accelerator.prepare_data_loader(data_loader)
 
     triplet_loss = nn.TripletMarginLoss(margin=1.0, p=2)
     distill_criterion = nn.CosineEmbeddingLoss()
@@ -376,8 +376,8 @@ def train_mem_model(config, encoder, dropout_layer, classifier, training_data, e
 
             _loss += loss.item()
             
-            # loss.backward()
-            accelerator.backward(loss)
+            loss.backward()
+            # accelerator.backward(loss)
             if ((step + 1) % accum_iter == 0) or (step + 1 == len(data_loader)):
                 losses.append(_loss)
                 _loss = 0
