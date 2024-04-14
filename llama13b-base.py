@@ -719,11 +719,10 @@ def process(config, task, shot):
                                                     token="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",
                                                     device_map=device_map)
         peft_config = LoraConfig(task_type=TaskType.SEQ_CLS,
-                                target_modules=["q_proj", "v_proj", "o_proj", "lm_head"],
+                                target_modules=["q_proj", "v_proj", "o_proj"],
                                 r=16,
                                 lora_alpha=32,
-                                lora_dropout=0.1,
-                                modules_to_save=["info_nce_fc"])
+                                lora_dropout=0.1)
         # model = prepare_model_for_int8_training(model)
         encoder = get_peft_model(encoder, peft_config)
         dropout_layer = Dropout_Layer(config=config).to(config.device1)
