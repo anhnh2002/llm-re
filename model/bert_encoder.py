@@ -136,24 +136,6 @@ class LlamaClassification(LlamaPreTrainedModel):
         hidden_states = transformer_outputs[0]
         
 
-        if input_ids is not None:
-            batch_size = input_ids.shape[0]
-        else:
-            batch_size = inputs_embeds.shape[0]
-
-        # if self.config.pad_token_id is None and batch_size != 1:
-        #     raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
-        if self.config.pad_token_id is None:
-            sequence_lengths = -1
-        else:
-            if input_ids is not None:
-                # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
-                sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
-                sequence_lengths = sequence_lengths % input_ids.shape[-1]
-                sequence_lengths = sequence_lengths.to(hidden_states.device)
-            else:
-                sequence_lengths = -1
-
         e11 = []
         # for each sample in the batch, acquire the positions of its [E11] and [E21]
         for i in range(input_ids.shape[0]):
@@ -164,38 +146,13 @@ class LlamaClassification(LlamaPreTrainedModel):
                 e11.append(len(tokens) - 1)
         
         output = []
-
-        # for each sample in the batch, acquire its representations for [E11] and [E21]
         for i in range(len(e11)):
             instance_output = torch.index_select(hidden_states, 0, torch.tensor(i).to(hidden_states.device))
             instance_output = torch.index_select(instance_output, 1, torch.tensor([e11[i]]).to(hidden_states.device))
-            output.append(instance_output)  # [B,N,H] --> [B,2,H]
+            output.append(instance_output)  # [B,N,H] --> [B,1,H]
         
         output = torch.stack(output)
         output = output.view(output.shape[0],-1) # [B,1,H] --> [B,H]
-
-        if get_feature == True:
-            # print("here")
-            tokens = input_ids[0].cpu().numpy()
-            x11 = np.argwhere(tokens == 376)[-2][0] + 1
-            x21 = np.argwhere(tokens == 376)[-1][0] + 1
-            try:
-                x12 = np.argwhere(tokens == 29908)[-2][0]
-                x22 = np.argwhere(tokens == 29908)[-1][0]
-            except:
-                try:
-                    x12 = np.argwhere(tokens == 29908)[-1][0]
-                    x22 = np.argwhere(tokens == 1213)[-1][0]
-                except:
-                    print(tokens)
-                    x12 = x11+1
-                    x22 = x21+1
-            
-            feature = torch.cat([torch.mean(hidden_states[:,x11:x12,:], dim=1), torch.mean(hidden_states[:,x21:x22,:], dim=1)], dim=1)
-            return feature
-
-        # logits = self.score(output)
-        # return self.dropout(logits)
         return output
     
 class LlamaLMClassification(LlamaPreTrainedModel):
