@@ -722,9 +722,9 @@ def process(config, task, shot):
         print("std_result_all_test")
         print(std_result_all_test)
         # wandb.log({"std_result_all_test": std_result_all_test})
-        with open('log.json', 'a') as f:
-            json.dump({'task': task, 'shot': shot, 'avg_result_all_test': avg_result_all_test, 'std_result_all_test': std_result_all_test}, f)
-            f.write('\n')
+        # with open('log.json', 'a') as f:
+        #     json.dump({'task': task, 'shot': shot, 'avg_result_all_test': avg_result_all_test, 'std_result_all_test': std_result_all_test}, f)
+        #     f.write('\n')
             
         accuracy = []
         temp_rel2id = [rel2id[x] for x in history_relations]
