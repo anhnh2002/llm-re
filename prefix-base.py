@@ -543,7 +543,7 @@ def process(config, task, shot):
         llama = LlamaClassification.from_pretrained("meta-llama/Llama-2-7b-hf",
                                                     token="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",
                                                     device_map=device_map)
-        config = PrefixTuningConfig(
+        prefix_config = PrefixTuningConfig(
             peft_type="PREFIX_TUNING",
             task_type="SEQ_CLS",
             num_virtual_tokens=1,
@@ -552,7 +552,7 @@ def process(config, task, shot):
             encoder_hidden_size=4096,
             prefix_projection =True
         )
-        prefix_encoder = PrefixEncoder(config).to(config.device0)
+        prefix_encoder = PrefixEncoder(prefix_config).to(config.device0)
 
         encoder = (llama, prefix_encoder)
 
