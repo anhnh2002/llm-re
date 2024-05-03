@@ -506,7 +506,7 @@ def evaluate_strict_model(config, encoder, dropout_layer, classifier, test_data,
         if label_smi >= max_smi:
             correct += 1
 
-    return (correct/n) + 0.01
+    return (correct/n)
 
 
 def select_data(config, encoder, dropout_layer, relation_dataset):
