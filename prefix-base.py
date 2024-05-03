@@ -540,7 +540,7 @@ def process(config, task, shot):
         rel2id = sampler.rel2id
         id2sentence = sampler.get_id2sent()
         # encoder = Bert_Encoder(config=config).to(config.device)
-        llama = LlamaClassification.from_pretrained("meta-llama/Llama-2-13b-hf",
+        llama = LlamaClassification.from_pretrained("meta-llama/Llama-2-7b-hf",
                                                     token="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",
                                                     device_map=device_map)
         config = PrefixTuningConfig(

@@ -739,7 +739,7 @@ def process(config, task, shot):
         rel2id = sampler.rel2id
         id2sentence = sampler.get_id2sent()
         # encoder = Bert_Encoder(config=config).to(config.device)
-        encoder = LlamaLMClassification.from_pretrained("meta-llama/Llama-2-13b-hf",
+        encoder = LlamaLMClassification.from_pretrained("meta-llama/Llama-2-7b-hf",
 #                                                   pad_token_id=32004,
 #                                                   torch_dtype=torch.float16,
 #                                                   quantization_config=bnb_config,
