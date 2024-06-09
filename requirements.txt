@@ -1,7 +1,5 @@
 transformers
 peft
-accelerate
 scikit-learn
 sentencepiece
 protobuf
-wandb
